@@ -88,13 +88,50 @@ def backtest(ticker: str, start: str, end: str, expiry_days: int = 7, risk_free:
     return df_trades, total_profit, win_rate
 
 
+def screen_market(
+    tickers: List[str],
+    start: str,
+    end: str,
+    expiry_days: int = 7,
+    risk_free: float = 0.05,
+    min_profit: float = 0.0,
+    min_win_rate: float = 0.0,
+) -> pd.DataFrame:
+    """Run the backtest across multiple tickers and screen for profitable opportunities."""
+    results = []
+    for t in tickers:
+        trades, total_profit, win_rate = backtest(t, start, end, expiry_days, risk_free)
+        if total_profit >= min_profit and win_rate >= min_win_rate:
+            results.append({
+                'Ticker': t,
+                'Total Profit': total_profit,
+                'Win Rate': win_rate,
+            })
+    if results:
+        df = pd.DataFrame(results)
+        return df.sort_values('Total Profit', ascending=False).reset_index(drop=True)
+    return pd.DataFrame(columns=['Ticker', 'Total Profit', 'Win Rate'])
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description='Simple options backtester')
-    parser.add_argument('ticker', help='Ticker symbol to backtest')
+    parser = argparse.ArgumentParser(description='Simple options backtester and screener')
+    parser.add_argument('ticker', nargs='?', help='Ticker symbol to backtest')
     parser.add_argument('--start', required=True, help='Backtest start date (YYYY-MM-DD)')
     parser.add_argument('--end', required=True, help='Backtest end date (YYYY-MM-DD)')
     parser.add_argument('--expiry', type=int, default=7, help='Days to expiration for each trade')
+    parser.add_argument('--screen', help='Comma separated list of tickers to screen for opportunities')
+    parser.add_argument('--min-profit', type=float, default=0.0, help='Minimum total profit to display a ticker')
+    parser.add_argument('--min-win-rate', type=float, default=0.0, help='Minimum win rate to display a ticker')
     args = parser.parse_args()
+
+    if args.screen:
+        tickers = [t.strip().upper() for t in args.screen.split(',') if t.strip()]
+        df = screen_market(tickers, args.start, args.end, args.expiry, min_profit=args.min_profit, min_win_rate=args.min_win_rate)
+        print(df)
+        return
+
+    if not args.ticker:
+        parser.error('Ticker argument required when not using --screen')
 
     trades, total_profit, win_rate = backtest(args.ticker, args.start, args.end, args.expiry)
 

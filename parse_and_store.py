@@ -3,8 +3,8 @@ import sqlite3
 import pandas as pd
 import os
 
-def setup_db():
-    conn = sqlite3.connect('prize_papers_dataset.db')
+def setup_db(db_path='prize_papers_dataset.db'):
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -25,10 +25,10 @@ def setup_db():
     return conn
 
 def main():
-    # Detect which data source to use: new Gemini JSON or fallback OCR results
     data_file = 'gemini_extracted_data.json'
     if not os.path.exists(data_file):
-        data_file = 'ocr_results.json'
+        print(f"Warning: Data file {data_file} not found. Please run process_with_gemini.py first.")
+        return
 
     print(f"Loading data from {data_file}")
     with open(data_file, 'r') as f:
@@ -38,13 +38,6 @@ def main():
     cursor = conn.cursor()
 
     for record in records:
-        # If it's old raw OCR data, we'd need the parse_text function.
-        # But we assume going forward that Gemini provides perfectly structured data.
-        # The keys from Gemini match the DB schema.
-        if 'timber_tons' not in record:
-             print("Warning: Skipping legacy unstructured record")
-             continue
-
         cursor.execute('''
         INSERT OR REPLACE INTO naval_stores_trade
         (id, ship_name, flag_state, date, timber_tons, tar_tons, pitch_tons, hemp_tons, flag_hopping, raw_text)
@@ -64,7 +57,6 @@ def main():
 
     conn.commit()
 
-    # Export to CSV for Antigravity engine
     df = pd.read_sql_query("SELECT * FROM naval_stores_trade", conn)
     df.to_csv("structured_dataset.csv", index=False)
 

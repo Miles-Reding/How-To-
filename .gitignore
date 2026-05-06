@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.db
+downloaded_images/
+*.json
+*.csv
+test_*.py
+generate_mock_data.py
+list_models.py

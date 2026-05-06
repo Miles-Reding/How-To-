@@ -5,14 +5,12 @@ import time
 import google.generativeai as genai
 from typing_extensions import TypedDict
 
-# Configure Gemini API
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     print("WARNING: GEMINI_API_KEY environment variable not set. Running in dummy mode.")
 
 genai.configure(api_key=api_key)
 
-# Define the expected JSON schema using TypedDict for Gemini's structured output
 class ManifestData(TypedDict):
     ship_name: str
     flag_state: str
@@ -24,7 +22,6 @@ class ManifestData(TypedDict):
     flag_hopping: int
 
 def get_dummy_response(img_path):
-    """Returns a dummy response if no API key is provided, useful for CI/CD and testing."""
     return {
         "ship_name": "Mock Star",
         "flag_state": "Neutral (Swedish)",
@@ -58,20 +55,17 @@ def process_image(img_path, model):
     If a specific cargo amount is not found, default to 0. If a string field is not found, use 'Unknown'.
     """
 
-    print(f"Processing {img_path} with Gemini 1.5 Pro...")
+    print(f"Processing {img_path} with Gemini...")
     try:
         response = model.generate_content(
             [sample_file, prompt],
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema=ManifestData,
-                temperature=0.1, # Low temperature for factual extraction
+                temperature=0.1,
             ),
         )
-        # Parse the JSON response
         result = json.loads(response.text)
-
-        # Clean up the file from Gemini storage
         genai.delete_file(sample_file.name)
         return result
     except Exception as e:
@@ -79,7 +73,8 @@ def process_image(img_path, model):
         return None
 
 def main():
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    # Use the available model
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
     image_files = glob.glob("downloaded_images/*.jpg")
     if not image_files:
@@ -90,13 +85,12 @@ def main():
     for img_path in image_files:
         data = process_image(img_path, model)
         if data:
-            # Attach an ID based on the filename
             doc_id = os.path.basename(img_path).replace(".jpg", "")
             data["id"] = doc_id
             data["raw_text"] = "Processed via Gemini Vision API directly to JSON."
             results.append(data)
 
-        time.sleep(2) # Prevent rate limiting
+        time.sleep(2)
 
     with open('gemini_extracted_data.json', 'w') as f:
         json.dump(results, f, indent=2)

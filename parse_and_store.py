@@ -1,35 +1,7 @@
 import json
 import sqlite3
-import re
 import pandas as pd
-
-def parse_text(text):
-    # Regex to extract structured data
-    ship_match = re.search(r"ship (.*?) sailing", text)
-    flag_match = re.search(r"under (.*?) colors", text)
-    date_match = re.search(r"Dated ([\d\-]+)", text)
-
-    cargo_items = {}
-    for item in ["timber", "tar", "pitch", "hemp"]:
-        # Find quantity of each specific item
-        item_match = re.search(rf"(\d+) tons of {item}", text)
-        if item_match:
-            cargo_items[item] = int(item_match.group(1))
-        else:
-            cargo_items[item] = 0
-
-    flag_hopping = 1 if "Suspicious registry papers" in text else 0
-
-    return {
-        "ship_name": ship_match.group(1).strip() if ship_match else "Unknown",
-        "flag_state": flag_match.group(1).strip() if flag_match else "Unknown",
-        "date": date_match.group(1).strip() if date_match else "Unknown",
-        "timber_tons": cargo_items["timber"],
-        "tar_tons": cargo_items["tar"],
-        "pitch_tons": cargo_items["pitch"],
-        "hemp_tons": cargo_items["hemp"],
-        "flag_hopping": flag_hopping
-    }
+import os
 
 def setup_db():
     conn = sqlite3.connect('prize_papers_dataset.db')
@@ -53,29 +25,41 @@ def setup_db():
     return conn
 
 def main():
-    with open('ocr_results.json', 'r') as f:
+    # Detect which data source to use: new Gemini JSON or fallback OCR results
+    data_file = 'gemini_extracted_data.json'
+    if not os.path.exists(data_file):
+        data_file = 'ocr_results.json'
+
+    print(f"Loading data from {data_file}")
+    with open(data_file, 'r') as f:
         records = json.load(f)
 
     conn = setup_db()
     cursor = conn.cursor()
 
     for record in records:
-        parsed = parse_text(record['raw_text'])
+        # If it's old raw OCR data, we'd need the parse_text function.
+        # But we assume going forward that Gemini provides perfectly structured data.
+        # The keys from Gemini match the DB schema.
+        if 'timber_tons' not in record:
+             print("Warning: Skipping legacy unstructured record")
+             continue
+
         cursor.execute('''
         INSERT OR REPLACE INTO naval_stores_trade
         (id, ship_name, flag_state, date, timber_tons, tar_tons, pitch_tons, hemp_tons, flag_hopping, raw_text)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            record['id'],
-            parsed['ship_name'],
-            parsed['flag_state'],
-            parsed['date'],
-            parsed['timber_tons'],
-            parsed['tar_tons'],
-            parsed['pitch_tons'],
-            parsed['hemp_tons'],
-            parsed['flag_hopping'],
-            record['raw_text']
+            record.get('id', 'unknown_id'),
+            record.get('ship_name', 'Unknown'),
+            record.get('flag_state', 'Unknown'),
+            record.get('date', 'Unknown'),
+            record.get('timber_tons', 0),
+            record.get('tar_tons', 0),
+            record.get('pitch_tons', 0),
+            record.get('hemp_tons', 0),
+            record.get('flag_hopping', 0),
+            record.get('raw_text', '')
         ))
 
     conn.commit()

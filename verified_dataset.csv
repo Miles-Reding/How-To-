@@ -49,3 +49,5 @@ HCA_32_4452,St. Petersburg Trader,Neutral (Swedish),1806-10-13,257,287,0,0,0,"Ma
 HCA_32_2497,Baltic Star,Dutch,1808-02-12,0,0,0,0,0,"Manifest of the ship Baltic Star sailing under Dutch colors. Dated 1808-02-12. Cargo consisting of: 364 tons of wheat, 473 tons of wheat, 246 tons of wheat.",False
 HCA_32_2581,James Lovett,British,1808-07-27,0,255,0,0,0,"Manifest of the ship James Lovett sailing under British colors. Dated 1808-07-27. Cargo consisting of: 255 tons of tar, 115 tons of tar.",False
 HCA_32_6563,Sea Gull,Neutral (American),1806-10-07,498,0,0,321,1,"Manifest of the ship Sea Gull sailing under Neutral (American) colors. Dated 1806-10-07. Cargo consisting of: 321 tons of hemp, 498 tons of timber. Note: Suspicious registry papers indicate prior British ownership.",False
+doc_0_default,Mock Star,Neutral (Swedish),1808-05-12,100,50,0,0,1,Processed via Gemini Vision API directly to JSON.,True
+prizepapers_document_9fe4c230-1551-49da-894e-0df5bcfdaaad,Mock Star,Neutral (Swedish),1808-05-12,100,50,0,0,1,Processed via Gemini Vision API directly to JSON.,True

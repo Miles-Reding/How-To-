@@ -3,6 +3,7 @@ import json
 import glob
 import time
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted, RetryError
 from typing_extensions import TypedDict
 
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -33,7 +34,7 @@ def get_dummy_response(img_path):
         "flag_hopping": 1
     }
 
-def process_image(img_path, model):
+def process_image_with_retry(img_path, model, max_retries=5):
     if not os.environ.get("GEMINI_API_KEY"):
         return get_dummy_response(img_path)
 
@@ -55,25 +56,36 @@ def process_image(img_path, model):
     If a specific cargo amount is not found, default to 0. If a string field is not found, use 'Unknown'.
     """
 
-    print(f"Processing {img_path} with Gemini...")
-    try:
-        response = model.generate_content(
-            [sample_file, prompt],
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=ManifestData,
-                temperature=0.1,
-            ),
-        )
-        result = json.loads(response.text)
-        genai.delete_file(sample_file.name)
-        return result
-    except Exception as e:
-        print(f"Error processing with Gemini: {e}")
-        return None
+    retries = 0
+    while retries < max_retries:
+        try:
+            print(f"Processing {img_path} with Gemini... (Attempt {retries + 1})")
+            response = model.generate_content(
+                [sample_file, prompt],
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json",
+                    response_schema=ManifestData,
+                    temperature=0.1,
+                ),
+            )
+            result = json.loads(response.text)
+            genai.delete_file(sample_file.name)
+            return result
+        except ResourceExhausted:
+            wait_time = (2 ** retries) * 10
+            print(f"Rate limit exceeded (429). Waiting {wait_time} seconds before retrying...")
+            time.sleep(wait_time)
+            retries += 1
+        except Exception as e:
+            print(f"Error processing with Gemini: {e}")
+            genai.delete_file(sample_file.name)
+            return None
+
+    print(f"Failed to process {img_path} after {max_retries} retries.")
+    genai.delete_file(sample_file.name)
+    return None
 
 def main():
-    # Use the available model
     model = genai.GenerativeModel('gemini-2.5-flash')
 
     image_files = glob.glob("downloaded_images/*.jpg")
@@ -81,21 +93,46 @@ def main():
         print("No images found in downloaded_images/. Run download_sample_images.py first.")
         return
 
-    results = []
+    output_file = 'gemini_extracted_data.json'
+
+    # Load existing results to allow resuming a crashed run
+    existing_results = {}
+    if os.path.exists(output_file):
+        try:
+            with open(output_file, 'r') as f:
+                data = json.load(f)
+                for item in data:
+                    existing_results[item['id']] = item
+            print(f"Loaded {len(existing_results)} existing records. Resuming...")
+        except json.JSONDecodeError:
+            print("Warning: Could not parse existing JSON file. Starting fresh.")
+
+    results_list = list(existing_results.values())
+    processed_count = 0
+
     for img_path in image_files:
-        data = process_image(img_path, model)
+        doc_id = os.path.basename(img_path).replace(".jpg", "")
+
+        # Skip if already processed successfully
+        if doc_id in existing_results:
+            continue
+
+        data = process_image_with_retry(img_path, model)
         if data:
-            doc_id = os.path.basename(img_path).replace(".jpg", "")
             data["id"] = doc_id
             data["raw_text"] = "Processed via Gemini Vision API directly to JSON."
-            results.append(data)
+            results_list.append(data)
+            processed_count += 1
 
-        time.sleep(2)
+            # Incremental save: save immediately after successful processing
+            with open(output_file, 'w') as f:
+                json.dump(results_list, f, indent=2)
 
-    with open('gemini_extracted_data.json', 'w') as f:
-        json.dump(results, f, indent=2)
+        # Basic delay to avoid hitting the standard RPM limit too fast
+        time.sleep(3)
 
-    print(f"\nProcessed {len(results)} documents. Data saved to gemini_extracted_data.json")
+    print(f"\nRun complete. Processed {processed_count} new documents.")
+    print(f"Total dataset size: {len(results_list)} documents saved to {output_file}.")
 
 if __name__ == "__main__":
     main()
